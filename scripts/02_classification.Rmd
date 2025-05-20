@@ -1,0 +1,650 @@
+---
+title: "brca_classification"
+output: pdf_document
+date: "2024-12-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(randomForest)
+library(xgboost)
+library(rpart); library(rpart.plot)
+```
+
+# 1. Data Import
+```{r}
+merged_data <- read.csv('r_output/merged_data.csv')
+gene_metadata <- read.csv('glycoenzyme_genes.csv')
+gene_list <- read.csv('glycoenzyme_gene_list.csv') %>% unlist
+```
+
+# 2. Classification Models
+
+## 2.1. Data Preparation
+
+```{r}
+# Define predictor variables (gene expressions and metadata columns)
+predictors <- merged_data[, 2:183]
+colnames(merged_data)[183:184] # Should see last enzyme and first metadata
+
+# Define response variable (PAM50)
+response <- merged_data$PAM50Call_RNAseq
+
+# cbind genes and predictors for rpart()
+rpart.df <- cbind(response, predictors)
+```
+
+```{r}
+# 4. Split Data into Training and Testing Sets
+set.seed(1234)
+train_index <- createDataPartition(response, p = 0.8, list = FALSE)
+
+train_data <- predictors[train_index, ]
+train_labels <- response[train_index] %>% as.factor
+
+test_data <- predictors[-train_index, ]
+test_labels <- response[-train_index] %>% as.factor
+```
+
+### Check Class Balance
+```{r}
+# Class balance check
+table(response)
+table(train_labels)
+table(test_labels)
+
+
+table(response) %>% pie(main = "Whole Data (n = 953)")
+table(train_labels) %>% pie(main = "Train Set (80%)")
+table(test_labels) %>% pie(main = "Test Set (20%)")
+
+```
+
+### Defining train control
+```{r}
+tc1 <- trainControl(method = "cv", number = 10)
+```
+
+
+## 2.2. Random Forest
+```{r}
+# 5. Train Random Forest Model
+set.seed(1234)
+rf_pre <- randomForest(
+  x = train_data,
+  y = train_labels,
+  ntree = 500,               # Number of trees
+  mtry = sqrt(ncol(train_data)), # Number of predictors sampled at each split
+  importance = TRUE          # Calculate variable importance
+)
+```
+
+```{r}
+# Evaluate the Model
+t_predictions <- predict(rf_pre, test_data)
+
+# Confusion Matrix
+confusionMatrix(predict(rf_pre, test_data), test_labels)
+```
+
+```{r}
+# Variable Importance
+var_importance <- importance(rf_pre) %>% as.data.frame
+varImpPlot(rf_pre, n.var = 20, cex = 0.8, main = "Variable Importance Plot - RF")
+
+```
+
+```{r}
+# Variable importance plot using ggplot
+top_genes <- var_importance %>% arrange(desc(MeanDecreaseGini)) %>% head(20)
+top_genes$gene <- rownames(top_genes)
+
+# Create horizontal bar chart
+ggplot(top_genes, aes(x = reorder(gene, MeanDecreaseGini), y = MeanDecreaseGini)) +
+  geom_bar(stat = "identity", fill = "darkgreen") +
+  coord_flip() +
+  labs(
+    title = "Top 20 Genes by Variable Importance",
+    x = "",
+    y = "Mean Decrease Gini"
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  ) +
+  scale_y_continuous(expand = c(0, 0))
+```
+
+
+```{r}
+set.seed(1234)
+rf <- train(x = train_data, y = train_labels,
+            method = "rf",
+            ntree = 500, tuneGrid = data.frame(mtry = 9:18),
+            trControl = tc1)
+```
+
+```{r}
+rf$results
+
+plot(rf$results$mtry, rf$results$Kappa)
+```
+
+
+rf determining best n.tree
+```{r}
+plot(x = c(1:500), y = rf$finalModel$err.rate[, 1],
+xlab = "Number of Trees", ylab = "OOB Error Rate",
+type = "l", col = "midnightblue", las = 1)
+```
+
+```{r}
+confusionMatrix(predict(rf, test_data), test_labels)
+```
+
+### Performance
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "Random Forest", "Accuracy" = 0.8564, "Kappa" = 0.7884)
+```
+
+## 2.3. Support Vector Machine
+```{r}
+# set up tuning grid
+tg_svmlin <- expand.grid(C = c(0.001, 0.01, 0.1 , 1, 10, 100))
+
+
+set.seed(1234)
+svmlin <- train(x = train_data, y = train_labels,
+method = 'svmLinear', tuneGrid = tg_svmlin,
+trControl = tc1)
+```
+
+```{r}
+svmlin$results
+```
+
+
+```{r}
+confusionMatrix(predict(svmlin, newdata = test_data), test_labels)
+```
+
+### Performance (linear)
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "SVM Linear", "Accuracy" = 0.8617,
+                     "Kappa" = 0.8003) %>% rbind(models)
+```
+
+```{r}
+set.seed(1234)
+svmpoly <- train(x = train_data, y = train_labels,
+method = 'svmPoly', tuneLength = 5,
+trControl = tc1)
+```
+
+```{r}
+svmpoly$results
+```
+
+
+```{r}
+confusionMatrix(predict(svmpoly, newdata = test_data), test_labels)
+```
+
+### Performance (polynomial)
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "SVM Polynomial", "Accuracy" = 0.8989,
+                     "Kappa" = 0.8555) %>% rbind(models)
+```
+
+```{r}
+set.seed(1234)
+svmrad <- train(x = train_data, y = train_labels,
+method = 'svmRadial', tuneLength = 5,
+trControl = tc1)
+```
+
+```{r}
+svmrad$results
+```
+
+
+```{r}
+confusionMatrix(predict(svmrad, newdata = test_data), test_labels)
+```
+
+### Performance (radial)
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "SVM Radial", "Accuracy" = 0.8883,
+                     "Kappa" = 0.8403) %>% rbind(models)
+```
+
+## 2.4. Logistic Regression
+```{r, results='hide', message=FALSE}
+logit <- train(x = train_data, y = train_labels, method = "multinom",
+                   trControl = tc1)
+```
+
+```{r}
+logit$results
+```
+
+
+```{r}
+confusionMatrix(predict(logit, newdata = test_data), test_labels)
+```
+
+### Performance
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "Logistic Regression", "Accuracy" = 0.7713,
+                     "Kappa" = 0.6808) %>% rbind(models)
+```
+
+## 2.5. Decision Trees
+```{r}
+set.seed(1234)
+cart_pre <- rpart(response ~., data = rpart.df, method = "class",
+                  parms = list(split = "gini"))
+
+tg_ctree <- data.frame(cp = cart_pre$cptable[,1])
+
+cart <- train(x = train_data, y = train_labels, method = "rpart",
+              parms = list(split = "gini"),
+              tuneGrid = tg_ctree,
+              trControl = trainControl(method = "cv", number = 10,
+                                       selectionFunction = "oneSE"))
+```
+
+```{r}
+cart$results
+```
+
+
+```{r}
+confusionMatrix(predict(cart, newdata = test_data), test_labels)
+```
+
+### Performance
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "Decision Tree", "Accuracy" = 0.6436,
+                     "Kappa" = 0.4373) %>% rbind(models)
+```
+
+```{r}
+rpart.plot(cart$finalModel, box.col = c("lightgreen", "tomato"))
+```
+
+
+## 2.6. XG Boost
+```{r, results='hide', warning=FALSE}
+set.seed(1234)
+xgboost <- train(x = train_data, y = train_labels, method = "xgbTree", trControl = tc1)
+```
+
+```{r}
+xgboost$results %>% head(5)
+```
+
+
+```{r}
+confusionMatrix(predict(xgboost, newdata = test_data), test_labels)
+```
+
+### Performance
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "XGBoost", "Accuracy" = 0.8511,
+                     "Kappa" = 0.7856) %>% rbind(models)
+```
+
+## 2.7. k-Nearest Neighbors
+```{r}
+knn_grid <- expand.grid(k = seq(1, 25, by = 2))
+
+set.seed(1234)
+knn <- train(x = train_data, y = train_labels, method = "knn",
+             tuneGrid = knn_grid,
+             trControl = tc1)
+```
+
+```{r}
+knn$results
+```
+
+
+```{r}
+confusionMatrix(predict(knn, newdata = test_data), test_labels)
+```
+
+### Performance
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "k-Nearest Neighbors", "Accuracy" = 0.7979,
+                     "Kappa" = 0.6913) %>% rbind(models)
+```
+
+## 2.11. Gradient Boosted Machines (GBM)
+```{r, results='hide'}
+set.seed(1234)
+bct <- train(x = train_data, y = train_labels, method = "gbm",
+             bag.fraction = 0.5,
+             tuneLength = 5,
+             trControl = tc1)
+```
+
+```{r}
+bct$results %>% head(5)
+```
+
+
+```{r}
+confusionMatrix(predict(bct, newdata = test_data), test_labels)
+```
+
+### Performance
+```{r}
+# Saving performance metrics
+models <- data.frame("Model" = "Boosted Trees", "Accuracy" = 0.8564,
+                     "Kappa" = 0.7916) %>% rbind(models)
+```
+
+################################################################################
+# 3. Model Outcome Analysis
+
+## Performance barchart
+```{r}
+# Reshape data for easier plotting
+models_long <- models %>%
+  pivot_longer(cols = c(Accuracy, Kappa), names_to = "Metric", values_to = "Value")
+
+# Order models for plotting
+models_long$Model <- factor(models_long$Model, levels = c(
+  "Logistic Regression", "k-Nearest Neighbors", "Decision Tree", "Random Forest",
+  "SVM Linear", "SVM Polynomial", "SVM Radial", "Boosted Trees", "XGBoost"
+))
+
+# Plot
+ggplot(models_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(values = c("Accuracy" = "grey", "Kappa" = "darkgreen")) +
+  labs(title = "",
+       y = "Metric Score", fill = "Metric") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    panel.grid.major.y = element_line(color = "grey80", linetype = "dashed")
+  ) +
+   scale_y_continuous(expand = c(0, 0), breaks = seq(0, 1, by = 0.2),
+                      limits = c(0, 1))
+```
+
+## Feature Importance and Family Analysis
+```{r}
+# Example: Genes from RF feature importance
+var_importance <- as.data.frame(var_importance)
+var_importance_sorted <- var_importance[order(var_importance$MeanDecreaseGini,
+                                              decreasing = TRUE), ]
+
+rf_genes <- rownames(var_importance_sorted)[1:30]
+
+
+# Filter metadata for RF genes
+mapped_genes <- gene_metadata %>%
+  filter(gene %in% rf_genes)
+
+# View the mapped genes
+print(mapped_genes)
+
+# Count genes per substrate
+substrate_counts <- mapped_genes %>%
+  count(substrate, name = "gene_count") %>%
+  arrange(desc(gene_count))
+
+# View counts per family
+print(substrate_counts)
+
+# Bar plot of family counts
+ggplot(substrate_counts, aes(x = reorder(substrate, -gene_count),
+                             y = gene_count)) +
+  geom_bar(stat = "identity", fill = "darkgreen") +
+  theme_classic() +
+  labs(x = "GT Substrate", y = "Gene Count") +
+  coord_flip() +
+  scale_y_continuous(expand = c(0, 0))
+```
+
+## Clan Enrichment Analysis
+```{r, eval=FALSE}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+# Define the top 50 significant genes
+top_genes <- c("UGT8", "B3GNT5", "ST8SIA1", "HAS3", "ALG3", "FUT8", "UGCG", "ALG1",
+               "MGAT3", "LFNG", "GALNT10", "GALNT7", "ST3GAL6", "PYGM", "B3GALT1", 
+               "B3GNT4", "ST6GALNAC6", "ST8SIA6", "DPM1", "GALNT6", "GLT8D2", 
+               "EXTL3", "GLT8D1", "ST3GAL3", "GCNT4", "ST6GALNAC1", "UGT2B11", 
+               "UGT2B7", "UGT2B15", "B3GALNT2", "C1GALT1", "GYG2", "B3GNT3", 
+               "B4GALT6", "GALNT4", "CSGALNACT1", "B4GALT3", "B3GNT7", "FUT3", 
+               "XYLT2", "ST6GALNAC3", "B3GAT1", "PIGV", "EXT1", "FUT4", "CHSY1", 
+               "B4GALT2", "DPY19L2", "ABO", "B3GNT8")
+
+# Filter metadata for the top genes
+enriched_clans <- gene_metadata %>%
+  filter(gene %in% top_genes) %>%
+  group_by(fold) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+# Plot the clan enrichment
+ggplot(enriched_clans, aes(x = reorder(fold, -count), y = count, fill = fold)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Fold Enrichment in Top 50 Glycoenzymes",
+    x = "Fold",
+    y = "Count of Genes"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+
+# 4. Confusion Matrices Visualization
+```{r}
+# Random Forest
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_rf <- table(predict(rf, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_rf, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "Random Forest", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```
+```{r}
+# SVM linear
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_svmlin <- table(predict(svmlin, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_svmlin, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "SVM Linear Kernel", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```
+
+```{r}
+# SVM poly
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_svmpoly <- table(predict(svmpoly, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_svmpoly, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "SVM Polynomial Kernel", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```
+
+```{r}
+# SVM radial
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_svmrad <- table(predict(svmrad, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_svmrad, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "SVM Radial Kernel", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```
+
+```{r}
+# Logistic Regression
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_logit <- table(predict(logit, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_logit, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "Logistic Regression", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```
+
+```{r}
+# Decision Tree
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_cart <- table(predict(cart, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_cart, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "Decision Tree", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```
+
+```{r}
+# XGBoost
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_xgboost <- table(predict(xgboost, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_xgboost, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "XGBoost", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```
+
+```{r}
+# k-Nearest Neighbor
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_knn <- table(predict(knn, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_knn, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "k-Nearest Neighbor", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```
+
+```{r}
+# Boosted Trees
+# The confusion matrix from a single assessment set (i.e. fold)
+cm_bct <- table(predict(bct, test_data), test_labels) %>% as.data.frame
+
+ggplot(cm_bct, aes(x = Var1, y = test_labels, fill = Freq)) +
+  geom_tile() +
+  theme_minimal() +
+  coord_equal() +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  labs(title = "Boosted Trees", x = NULL, y = NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text = element_text(size = 14),
+    axis.title = element_blank()
+  ) +
+  guides(fill = FALSE) +
+  geom_text(aes(label = Freq), color = "grey8", size = 4)
+```

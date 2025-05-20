@@ -1,0 +1,173 @@
+---
+title: "brca_code_bank"
+output: pdf_document
+date: "2024-12-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Pathway Enrichment Analysis
+
+```{r}
+# Example glycoenzyme gene list
+gene_list <- c("UGT8", "B3GNT5", "ST8SIA1", "HAS3", "ALG3", "FUT8", "UGCG", 
+               "ALG1", "MGAT3", "LFNG", "GALNT10", "GALNT7", "ST3GAL6", 
+               "PYGM", "B3GALT1", "B3GNT4")
+# Install required packages (if not installed)
+if (!requireNamespace("clusterProfiler")) BiocManager::install("clusterProfiler")
+if (!requireNamespace("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
+if (!requireNamespace("ReactomePA")) BiocManager::install("ReactomePA")
+
+# Load libraries
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ReactomePA)
+
+# Map gene symbols to Entrez IDs
+gene_entrez <- bitr(gene_list, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+
+# Check mapping
+print(gene_entrez)
+
+# KEGG pathway enrichment
+kegg_results <- enrichKEGG(
+  gene = gene_entrez$ENTREZID,
+  organism = 'hsa',
+  pvalueCutoff = 0.05
+)
+
+# View results
+head(kegg_results)
+
+# Plot KEGG results
+dotplot(kegg_results, showCategory = 10) + ggtitle("KEGG Pathway Enrichment")
+
+# Reactome pathway enrichment
+reactome_results <- enrichPathway(
+  gene = gene_entrez$ENTREZID,
+  organism = "human",
+  pvalueCutoff = 0.05
+)
+
+# View results
+head(reactome_results)
+
+# Plot Reactome results
+dotplot(reactome_results, showCategory = 10) + ggtitle("Reactome Pathway Enrichment")
+
+# GO enrichment analysis
+go_results <- enrichGO(
+  gene = gene_entrez$ENTREZID,
+  OrgDb = org.Hs.eg.db,
+  ont = "BP", # Biological Process
+  pvalueCutoff = 0.05
+)
+
+# View results
+head(go_results)
+
+# Plot GO results
+dotplot(go_results, showCategory = 10) + ggtitle("GO Biological Processes")
+
+
+```
+
+# PCA
+
+## 4.1. Clustering the Patients
+
+```{r}
+# Perform PCA
+counts_tr <- t(counts)[-1,] %>% as.data.frame
+
+# Convert all columns to numeric
+counts_tr[] <- lapply(counts_tr, function(x) as.numeric(trimws(x)))
+
+# Principal Components Analysis
+p_pca <- prcomp(counts_tr, scale = TRUE)
+
+# Create a data frame with PCA results
+p_pca_df <- as.data.frame(p_pca$x)
+# Add sample IDs?
+
+#######
+p_pca_df$gene <- rownames(p_pca_df)
+
+# Merge the PCA dataframe with the gene metadata
+combined_df <- merge(p_pca_df, gene_metadata, by = "gene", all.x = TRUE)
+
+# a. Color by fold
+ggplot(combined_df, aes(x = PC1, y = PC2, color = fold)) +
+  geom_point(size = 2, alpha = 0.6) +
+  labs(title = "a", x = "PC1", y = "PC2") +
+  theme_classic() +
+  theme(legend.position = c(0.9, 0.2))
+
+# b. Color by clan
+ggplot(combined_df, aes(x = PC1, y = PC2, color = clan)) +
+  geom_point(size = 2, alpha = 0.6) +
+  labs(title = "b", x = "PC1", y = "PC2") +
+  theme_classic() +
+  theme(legend.position = c(0.9, 0.2))
+
+# c. Color by family
+ggplot(combined_df, aes(x = PC1, y = PC2, color = family)) +
+  geom_point(size = 2, alpha = 0.6) +
+  labs(title = "c", x = "PC1", y = "PC2") +
+  theme_classic()
+
+
+#######
+
+# Calculate variance explained by PC
+p_pc_vars <- p_pca$sdev^2 / sum(p_pca$sdev^2)
+
+# Plot the PCA results
+ggplot(p_pca_df, aes(x = PC1, y = PC2)) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(x = "PC1", y = "PC2") +
+  theme_bw()
+
+# Plot cumulative variance explained
+p_cumvar <- cumsum(p_pc_vars)
+
+plot(p_cumvar, type = "p", pch = 20, cex= 0.8,
+     xlab = "Number of PCs",
+     ylab = "Cumulative Variance Explained")
+
+```
+
+## 4.2. Clustering the Glycoenzyme Genes
+
+```{r}
+# Principal Components Analysis
+g_pca <- prcomp(counts[ , -1], scale = TRUE)
+
+# Create a data frame with PCA results
+g_pca_df <- as.data.frame(g_pca$x)
+#pca_df$SampleID <- rownames(pca$x)  # Add sample IDs
+
+# Plot the PCA results
+ggplot(g_pca_df, aes(x = PC1, y = PC2)) +
+  geom_point(size = 2, alpha = 0.7) +
+  labs(x = "PC1", y = "PC2") +
+  theme_classic()
+
+# Calculate variance explained by PC
+g_pc_vars <- g_pca$sdev^2 / sum(g_pca$sdev^2)
+
+# Plot cumulative variance explained
+g_cumvar <- cumsum(g_pc_vars)
+
+plot(g_cumvar, type = "p", pch = 20, cex= 0.8,
+     xlab = "Number of PCs",
+     ylab = "Cumulative Variance Explained") +
+  abline(h = 0.75, col = "red", lty = 2)  # Mark 80% threshold
+
+# Biplot
+#biplot(pca, cex = 0.5, scale = 0)
+
+```
+
