@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Load Libraries
 ```{r, message=FALSE}
+library(here)
 library(tidyverse)
 library(caret)
 library(ggplot2)
@@ -20,9 +21,10 @@ library(rpart); library(rpart.plot)
 
 # 1. Data Import
 ```{r}
-merged_data <- read.csv('r_output/merged_data.csv')
-gene_metadata <- read.csv('glycoenzyme_genes.csv')
-gene_list <- read.csv('glycoenzyme_gene_list.csv') %>% unlist
+merged_data <- read.csv(here("data", "Processed", "merged_data.csv"))
+gene_metadata <- read.csv(here("data", "Processed", "glycoenzyme_genes.csv"))
+gene_list <- read.csv(here("data", "Processed",
+                           "glycoenzyme_gene_list.csv")) %>% unlist
 ```
 
 # 2. Classification Models

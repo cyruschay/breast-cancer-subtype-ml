@@ -15,6 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 gene_list <- c("UGT8", "B3GNT5", "ST8SIA1", "HAS3", "ALG3", "FUT8", "UGCG", 
                "ALG1", "MGAT3", "LFNG", "GALNT10", "GALNT7", "ST3GAL6", 
                "PYGM", "B3GALT1", "B3GNT4")
+
 # Install required packages (if not installed)
 if (!requireNamespace("clusterProfiler")) BiocManager::install("clusterProfiler")
 if (!requireNamespace("org.Hs.eg.db")) BiocManager::install("org.Hs.eg.db")
@@ -26,7 +27,8 @@ library(org.Hs.eg.db)
 library(ReactomePA)
 
 # Map gene symbols to Entrez IDs
-gene_entrez <- bitr(gene_list, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+gene_entrez <- bitr(gene_list, fromType = "SYMBOL",
+                    toType = "ENTREZID", OrgDb = org.Hs.eg.db)
 
 # Check mapping
 print(gene_entrez)
@@ -42,7 +44,8 @@ kegg_results <- enrichKEGG(
 head(kegg_results)
 
 # Plot KEGG results
-dotplot(kegg_results, showCategory = 10) + ggtitle("KEGG Pathway Enrichment")
+dotplot(kegg_results, showCategory = 10)+
+  ggtitle("KEGG Pathway Enrichment")
 
 # Reactome pathway enrichment
 reactome_results <- enrichPathway(
@@ -55,7 +58,8 @@ reactome_results <- enrichPathway(
 head(reactome_results)
 
 # Plot Reactome results
-dotplot(reactome_results, showCategory = 10) + ggtitle("Reactome Pathway Enrichment")
+dotplot(reactome_results, showCategory = 10) +
+  ggtitle("Reactome Pathway Enrichment")
 
 # GO enrichment analysis
 go_results <- enrichGO(

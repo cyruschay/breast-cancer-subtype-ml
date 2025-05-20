@@ -26,9 +26,9 @@ This project explores the role of **glycosyltransferase (GT) gene expression** i
 **Data Source**
 
 - **TCGA Breast Cancer (BRCA)**: [RNA-seq data](https://xenabrowser.net/datapages/?dataset=TCGA.BRCA.sampleMap%2FHiSeqV2&host=https%3A%2F%2Ftcga.xenahubs.net&removeHub=https%3A%2F%2Fxena.treehouse.gi.ucsc.edu%3A443)
-   - Metadata: PAM50 subtype labels and clinical variables
+  - Metadata: PAM50 subtype labels and clinical variables
 - **List of Human Glycosyltransferases**: [ccrc.uga](https://glycoenzymes.ccrc.uga.edu/FramesetVersion/GTalphabeticalList.html)
-   - N = 209; 182 successfully mapped to expression matrix
+  - N = 209; 182 successfully mapped to expression matrix
 
 ---
 
@@ -101,13 +101,19 @@ This project uses **R (≥ 4.4.1)** and the following packages:
 `tidyverse` `dplyr` `ggplot2` `caret` `randomForest` `xgboost` `rpart` `rpart.plot`
 
 ```r
-packages <- c("tidyverse", "caret", "ggplot2", "randomForest", "xgboost", "rpart", "rpart.plot", "dplyr")
+packages <- c("here", "tidyverse", "dplyr", "ggplot2",
+   "caret", "randomForest", "xgboost", "rpart", "rpart.plot")
 
 for (p in packages) {
   if (!requireNamespace(p, quietly = TRUE)) {
     install.packages(p, dependencies = TRUE)
   }
 }
+```
+
+```r
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
 ```
 
 ## How to Run
