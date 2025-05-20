@@ -98,7 +98,7 @@ The **SVM with polynomial kernel** performed best:
 ## Dependencies
 
 This project uses **R (≥ 4.4.1)** and the following packages:  
-`tidyverse` `dplyr` `ggplot2` `caret` `randomForest` `xgboost` `rpart` `rpart.plot`
+`here` `tidyverse` `dplyr` `ggplot2` `caret` `randomForest` `xgboost` `rpart` `rpart.plot`
 
 ```r
 packages <- c("here", "tidyverse", "dplyr", "ggplot2",
