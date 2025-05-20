@@ -1,10 +1,10 @@
 # Breast Cancer Subtype Classification using Gene Expression
 
-Keywords: `Machine Learning`, `transcriptomics`, `glycobiology`
+**Keywords**: `Machine Learning`, `transcriptomics`, `glycobiology`
 
-**Author**: Cyrus Chun Hong Au Yeung  
-**Date**: November 2024
-**Poster**: poster.pdf
+**Author**: Cyrus C.H. Au Yeung  
+**Date**: November 2024  
+**Poster**: [poster.pdf](https://github.com/cyruschay/breast-cancer-subtype-ml/blob/main/poster.pdf)
 
 ---
 
@@ -22,6 +22,15 @@ This project explores the role of **glycosyltransferase (GT) gene expression** i
 
 - Develop and evaluate multiple ML models using GT gene expression to classify breast cancer subtypes.
 - Identify key glycoenzymes that serve as predictive biomarkers for subtype classification.
+
+**Data Source**
+
+- **TCGA Breast Cancer (BRCA)**: [RNA-seq data](https://xenabrowser.net/datapages/?dataset=TCGA.BRCA.sampleMap%2FHiSeqV2&host=https%3A%2F%2Ftcga.xenahubs.net&removeHub=https%3A%2F%2Fxena.treehouse.gi.ucsc.edu%3A443)
+   - Metadata: PAM50 subtype labels and clinical variables
+- **List of Human Glycosyltransferases**: [ccrc.uga](https://glycoenzymes.ccrc.uga.edu/FramesetVersion/GTalphabeticalList.html)
+   - N = 209; 182 successfully mapped to expression matrix
+
+---
 
 ## Project Structure
 
@@ -42,12 +51,6 @@ breast-cancer-subtype-ml/
 ├── poster.pdf
 └── .gitignore
 ```
-
-## Data Source
-
-- **TCGA Breast Cancer (BRCA)** RNA-seq data (downloaded via UCSC Xena)
-- 209 GT genes identified; 182 successfully mapped to expression matrix
-- Metadata includes PAM50 subtype labels and clinical variables
 
 ---
 
@@ -74,7 +77,7 @@ breast-cancer-subtype-ml/
 **Model evaluation:**
 
 - 80/20 train-test split
-- 10-fold cross-validation
+- 10-fold cross-validation for hyperparameter-tuning
 - Primary metric: **Kappa Statistic** (accounts for class imbalance)
 
 ### 3. Best Model
@@ -84,6 +87,8 @@ The **SVM with polynomial kernel** performed best:
 - **Accuracy**: 89.9%
 - **Kappa**: 0.8555
 
+![modelperformance](https://github.com/cyruschay/breast-cancer-subtype-ml/blob/main/results/barplot.png?raw=true)
+
 ## Key Findings
 
 - Top GT genes: `UGT8`, `B3GNT5`, `ST8SIA1`
@@ -92,16 +97,17 @@ The **SVM with polynomial kernel** performed best:
 
 ## Dependencies
 
-This project uses **R (≥ 4.4.1)** and the following packages:
+This project uses **R (≥ 4.4.1)** and the following packages:  
+`tidyverse` `dplyr` `ggplot2` `caret` `randomForest` `xgboost` `rpart` `rpart.plot`
 
 ```r
-library(tidyverse)
-library(caret)
-library(randomForest)
-library(xgboost)
-library(e1071)
-library(rpart)
-library(rpart.plot)
+packages <- c("tidyverse", "caret", "ggplot2", "randomForest", "xgboost", "rpart", "rpart.plot", "dplyr")
+
+for (p in packages) {
+  if (!requireNamespace(p, quietly = TRUE)) {
+    install.packages(p, dependencies = TRUE)
+  }
+}
 ```
 
 ## How to Run
