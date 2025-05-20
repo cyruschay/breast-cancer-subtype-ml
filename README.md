@@ -1,6 +1,6 @@
 # Breast Cancer Subtype Classification using Gene Expression
 
-**Keywords**: `Machine Learning`, `transcriptomics`, `glycobiology`
+**Keywords**: `Machine Learning`, `Transcriptomics`, `Glycobiology`, `R`
 
 **Author**: Cyrus C.H. Au Yeung  
 **Date**: November 2024  
